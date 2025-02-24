@@ -1,11 +1,50 @@
-"""
-    This module is used for media files like images, videos, etc.
-    Some functionalities are:
-    1. Download media files from websites
-    2. Play media files
-    3. Record audio
-    4. Record video
-    5. Take screenshots
+"""A module for managing media files with downloading, playback, recording, and screenshot capabilities.
+
+This module defines the `Media` class, which provides a unified interface for handling various media operations.
+It supports downloading media from URLs (e.g., YouTube videos), playing audio and video files, recording audio from
+a microphone, capturing video from a webcam, and taking screenshots. The module is designed for ease of use in
+media-related applications, with non-blocking playback and error handling.
+
+Key Features:
+    - Download media files from URLs using yt-dlp with MP4 output.
+    - Play media files asynchronously using VLC with stop control.
+    - Record audio (WAV) and video (AVI) with specified durations.
+    - Capture screenshots as PNG images.
+    - Configurable output directory and optional verbose logging.
+
+Dependencies:
+    - yt_dlp: For downloading media from online sources.
+    - vlc: For media playback using the VLC library.
+    - pyaudio: For recording audio from the microphone.
+    - wave: For saving audio recordings in WAV format.
+    - cv2: For video recording via OpenCV.
+    - pyautogui: For capturing screenshots.
+    - threading: For non-blocking media playback.
+    - os: For file and directory management.
+    - time: For timing operations and delays.
+
+Classes:
+    Media: The primary class for interacting with media functionalities.
+
+Constants:
+    None explicitly defined, but methods use internal defaults (e.g., output path "../output").
+
+Usage Example:
+    ```python
+    from media import Media  # Assuming the file is named 'media.py'
+    media = Media()
+    # Download a video
+    file_path = media.download("https://www.youtube.com/watch?v=example")
+    # Play the downloaded file
+    media.play(file_path)
+    # Record 5 seconds of audio
+    media.record_audio("output.wav", 5)
+    # Record 5 seconds of video
+    media.record_video("output.avi", 5)
+    # Take a screenshot
+    media.screenshot("capture.png")
+    # Stop playback if needed
+    media.stop_playback()
 """
 import yt_dlp
 import os
@@ -19,6 +58,20 @@ import threading
 
 class Media(object):
     def __init__(self):
+        """Initializes the Media class for handling media-related operations.
+
+        Attributes:
+            player (vlc.MediaPlayer or None): VLC player instance for media playback.
+            instance (vlc.Instance or None): VLC instance for configuring playback.
+            playback_thread (threading.Thread or None): Thread for non-blocking playback.
+            stop_event (threading.Event): Event to signal playback termination.
+            out_path (str): Directory path for saving output files (default: "../output").
+            verbose (bool): Flag for enabling verbose output (default: False).
+
+        Notes:
+            - The output directory is not created until a method requiring it is called.
+            - Playback-related attributes are initialized as None and set during playback.
+        """
         self.player = None  # Store the VLC player instance
         self.instance = None  # Store the VLC instance
         self.playback_thread = None  # Store the playback thread
@@ -27,14 +80,24 @@ class Media(object):
         self.verbose = False
 
     def download(self, url=None):
-        """
-        Downloads media from a URL using yt-dlp.
+        """Downloads media from a URL using yt-dlp and saves it to the output directory.
 
-        Parameters:
-            url (str, optional): The URL of the media to download. Defaults to None.
+        Args:
+            url (str, optional): The URL of the media to download (e.g., YouTube link).
+                Defaults to None.
 
         Returns:
-            str or None: The file path if successful, None if an error occurs.
+            str or None: The filepath of the downloaded media if successful, None otherwise.
+
+        Raises:
+            yt_dlp.DownloadError: If the download fails due to a yt-dlp issue.
+            yt_dlp.ExtractorError: If URL extraction fails.
+            Exception: For unexpected errors during download.
+
+        Notes:
+            - Creates the output directory if it doesn’t exist.
+            - Downloads in MP4 format with the best available video and audio.
+            - Verbose mode prints download time and filepath.
         """
         if not url or not isinstance(url, str):
             print("A valid URL string is required to download media.")
@@ -76,14 +139,18 @@ class Media(object):
             return None
 
     def play(self, filename):
-        """
-        Plays a media file using VLC in a non-blocking thread.
+        """Plays a media file using VLC in a non-blocking thread.
 
-        Parameters:
-            filename (str): The path to the media file to play.
+        Args:
+            filename (str): Path to the media file to play (e.g., "video.mp4").
 
         Returns:
-            bool: True if playback starts successfully, False otherwise.
+            bool: True if playback starts successfully, False if the file is missing or another playback is active.
+
+        Notes:
+            - Playback runs in a separate thread to avoid blocking the main process.
+            - Use `stop_playback()` to stop the media before starting a new one.
+            - Verbose mode prints the absolute filepath being played.
         """
         if not os.path.exists(filename):
             print(f"File not found: {filename}")
@@ -102,7 +169,18 @@ class Media(object):
         return True
 
     def _play_in_thread(self, filename, audio_only=False):
-        """Helper method to run playback in a separate thread."""
+        """Helper method to handle media playback in a separate thread.
+
+        Args:
+            filename (str): Path to the media file to play.
+            audio_only (bool, optional): If True, plays audio only (no video). Defaults to False.
+
+        Notes:
+            - Internal method; not intended for direct use.
+            - Configures VLC with minimal verbosity and Direct3D11 output.
+            - Cleans up resources (player and instance) after playback ends or is stopped.
+            - Verbose mode provides detailed playback status updates.
+        """
         try:
             # Configure VLC instance
             vlc_args = ['--verbose=-1', '--vout=direct3d11', '--no-spu']
@@ -148,11 +226,14 @@ class Media(object):
             self.stop_event.clear()  # Reset stop event
 
     def stop_playback(self):
-        """
-        Stops the currently playing media.
+        """Stops the currently playing media.
 
         Returns:
-            bool: True if stopped successfully, False if no playback was active.
+            bool: True if playback was stopped successfully, False if no playback was active.
+
+        Notes:
+            - Waits for the playback thread to finish before returning.
+            - Verbose mode confirms when playback is stopped.
         """
         if not self.playback_thread or not self.playback_thread.is_alive():
             print("No playback is currently active.")
@@ -165,15 +246,19 @@ class Media(object):
         return True
 
     def record_audio(self, filename, duration):
-        """
-        Records audio from the microphone for a specified duration.
+        """Records audio from the microphone and saves it as a WAV file.
 
-        Parameters:
-            filename (str): The path where the audio file (WAV) will be saved.
-            duration (int): Recording duration in seconds.
+        Args:
+            filename (str): Name of the output audio file (saved in `out_path`).
+            duration (int or float): Recording duration in seconds.
 
         Returns:
-            bool: True if recording is successful, False otherwise.
+            bool: True if recording succeeds, False if duration is invalid or an error occurs.
+
+        Notes:
+            - Audio is recorded at 44.1 kHz, 16-bit, mono.
+            - The full filepath is constructed as `out_path/filename`.
+            - Prints recording status and filepath on completion.
         """
         if not isinstance(duration, (int, float)) or duration <= 0:
             print("Duration must be a positive number.")
@@ -213,15 +298,19 @@ class Media(object):
             return False
 
     def record_video(self, filename, duration):
-        """
-        Records video from the webcam for a specified duration.
+        """Records video from the default webcam and saves it as an AVI file.
 
-        Parameters:
-            filename (str): The path where the video file (AVI) will be saved.
-            duration (int): Recording duration in seconds.
+        Args:
+            filename (str): Name of the output video file (saved in `out_path`).
+            duration (int or float): Recording duration in seconds.
 
         Returns:
-            bool: True if recording is successful, False otherwise.
+            bool: True if recording succeeds, False if duration is invalid or webcam access fails.
+
+        Notes:
+            - Video is recorded at 20 FPS with a 640x480 resolution using the XVID codec.
+            - The full filepath is constructed as `out_path/filename`.
+            - Prints recording status and filepath on completion.
         """
         if not isinstance(duration, (int, float)) or duration <= 0:
             print("Duration must be a positive number.")
@@ -256,14 +345,18 @@ class Media(object):
             return False
 
     def screenshot(self, filename="screenshot.png"):
-        """
-        Takes a screenshot and saves it as an image file.
+        """Captures a screenshot of the screen and saves it as a PNG file.
 
-        Parameters:
-            filename (str): The path where the screenshot (PNG) will be saved.
+        Args:
+            filename (str, optional): Name of the output image file (saved in `out_path`).
+                Defaults to "screenshot.png".
 
         Returns:
-            bool: True if screenshot is successful, False otherwise.
+            bool: True if the screenshot is saved successfully, False if an error occurs.
+
+        Notes:
+            - The full filepath is constructed as `out_path/filename`.
+            - Verbose mode prints the saved filepath.
         """
         try:
             file_path = self.out_path + "/" + filename

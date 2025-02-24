@@ -1,5 +1,5 @@
 import lib
-from time import sleep
+from time import sleep, time
 
 class Office(object):
     def __init__(self):
@@ -21,8 +21,27 @@ if __name__ == "__main__":
     # Test screenshot
     office.media.screenshot()
     # Transcribe the audio
-    result = office.llm.transcribe(audio_file=file_path)
-    print(f"Lyrics: {result['text']}")
+    start_time = time()
+    office.llm.verbose = False
+    result = office.llm.transcribe(audio_file=file_path, language="en")
+    run_time = time() - start_time
+    print(f"Transcription completed in {run_time:.2f} seconds!")
     # Translate the text to Vietnamese
     vi_text = office.llm.translate(result['text'], target_language="vi")
     print(f"Translated Lyrics: {vi_text}")
+
+    """ For select the best transcription models and parameters
+    for method in ["whisper", "fast_whisper", "whisperx"]:
+        for model in ["tiny", "base"]:
+            for compute_type in ["float32", "int8"]:
+                start_time = time()
+                print(f"Transcribing audio using {method} model {model} with {compute_type} compute type... ", end="")
+                result = office.llm.transcribe(audio_file=file_path, method=method, compute_type=compute_type)
+                print(f"Lyrics: {result['text']}")
+                run_time = time() - start_time
+                print(f"Completed in {run_time:.2f} seconds!")
+
+    # Translate the text to Vietnamese
+    #vi_text = office.llm.translate(result['text'], target_language="vi")
+    #print(f"Translated Lyrics: {vi_text}")
+    """
