@@ -32,15 +32,15 @@ Usage:
     transcription = llm.transcribe("audio.wav")
     llm.speak("Hello, world!")
 """
-
-from openai import OpenAI
-import pyttsx3          # For text to speech
-import whisper          # For transcribe
-import torch
-from time import time
-from faster_whisper import WhisperModel
-import whisperx
 import os
+import sys
+from time import time
+from openai import OpenAI
+from faster_whisper import WhisperModel
+import pyttsx3          # For text to speech
+#import whisper          # For transcribe
+#import whisperx
+
 
 OLLAMA_BASE_URL = "http://127.0.0.1:11434/v1"  # Default Ollama address
 
@@ -210,6 +210,8 @@ class LLM(object):
 
         try:
             if method == "whisper":
+                if 'whisper' not in sys.modules:
+                    whisper = __import__('whisper')
                 whisper_model = whisper.load_model(model)
                 result = whisper_model.transcribe(audio_file, fp16=False, language=language)  # Pass language to Whisper
             elif method == "fast_whisper":
@@ -217,9 +219,11 @@ class LLM(object):
                 segments, info = whisper_model.transcribe(audio_file, language=language, beam_size=1)
                 result = {'text': " ".join([segment.text for segment in segments]), 'info': info}
             elif method == "whisperx":
+                if 'whisperx' not in sys.modules:
+                    whisperx = __import__('whisperx')
                 # Load WhisperX model
-                device = "cuda" if torch.cuda.is_available() else "cpu"
-                whisperx_model = whisperx.load_model(model, device, compute_type=compute_type, language=language)
+                # device = "cuda" if torch.cuda.is_available() else "cpu"
+                whisperx_model = whisperx.load_model(model, compute_type=compute_type, language=language)
                 audio = whisperx.load_audio(audio_file)
                 result = whisperx_model.transcribe(audio, language=language, task="transcribe")     # Do the transcription only
                 # Combine segments into a single text output
